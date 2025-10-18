@@ -1,5 +1,6 @@
 # Redstone_Poop
 ## 赤石科技之铁傀儡机 但是HTML  
+github pages首次加载提示缺少core属于正常现象 刷新即可  
 展示视频：等会再写  
 bgm来自 (https://www.bilibili.com/video/BV1Tq73zzE8b)  
 使用贴图均来自Minecraft Wiki及原版1.21.4解包文件  
