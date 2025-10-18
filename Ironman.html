@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>赤石科技-HTML铁傀儡机</title>
+    <link rel="icon" type="image/png" href="./Red_stone.png">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0d1524;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            cursor: grab;
+        }
+        
+        body.dragging {
+            cursor: grabbing;
+        }
+        
+        .container {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        
+        .scene-container {
+            width: 100%;
+            height: 100vh;
+            perspective: 1200px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .scene-wrapper {
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.1s ease-out;
+        }
+        
+        .scene {
+            width: 300px;
+            height: 300px;
+            position: relative;
+            transform-style: preserve-3d;
+            transform: rotateX(180deg) rotateY(180deg);
+        }
+        
+        .block {
+            position: absolute;
+            transform-style: preserve-3d;
+            transition: transform 0.4s ease-in-out;
+        }
+        
+        .face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-size: cover;
+            border: 2px solid rgba(0, 0, 0, 0.3);
+            /* 临近采样贴图 */
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -o-crisp-edges;
+            image-rendering: pixelated;
+            -ms-interpolation-mode: nearest-neighbor;
+        }
+        
+        .front { transform: translateZ(50px); }
+        .back { transform: rotateY(180deg) translateZ(50px); }
+        .right { transform: rotateY(90deg) translateZ(50px); }
+        .left { transform: rotateY(-90deg) translateZ(50px); }
+        .top { transform: rotateX(90deg) translateZ(50px); }
+        .bottom { transform: rotateX(-90deg) translateZ(50px); }
+        
+        /* 铁块 */
+        .iron-block .face {
+            background-image: url('./BlockSprite_block-of-iron.png');
+        }
+        
+        /* 南瓜 */
+        .pumpkin .front {
+            background-image: url('./BlockSprite_carved-pumpkin.png');
+        }
+        
+        .pumpkin .back,
+        .pumpkin .right,
+        .pumpkin .left {
+            background-image: url('./BlockSprite_pumpkin.png');
+        }
+        
+        .pumpkin .top {
+            background-image: url('./pumpkin_top.png');
+        }
+        
+        .pumpkin .bottom {
+            background-image: url('./pumpkin_top.png');
+        }
+        
+        /* 控制旋转 */
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            opacity: 0.7;
+            transition: opacity 0.3s ease;
+            pointer-events: auto;
+        }
+        
+        .controls.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        button {
+            background: rgba(52, 152, 219, 0.8);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+            backdrop-filter: blur(5px);
+        }
+        
+        button:hover {
+            background: rgba(41, 128, 185, 0.9);
+            transform: translateY(-2px);
+        }
+        
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 5px;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        
+        .instructions.hidden {
+            opacity: 0;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            text-align: center;
+        }
+        
+        .fallback-texture {
+            width: 80%;
+            height: 80%;
+            background-color: rgba(0,0,0,0.1);
+            background-image: 
+                linear-gradient(45deg, rgba(0,0,0,0.1) 25%, transparent 25%), 
+                linear-gradient(-45deg, rgba(0,0,0,0.1) 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, rgba(0,0,0,0.1) 75%), 
+                linear-gradient(-45deg, transparent 75%, rgba(0,0,0,0.1) 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+        
+        .audio-hint {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 5px;
+            opacity: 1;
+            transition: opacity 0.5s ease;
+        }
+        
+        .audio-hint.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #e74c3c;
+            font-size: 24px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid #e74c3c;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="container">
+        <div class="scene-container">
+            <div class="loading" id="loading">草羊中...</div>
+            <div class="scene-wrapper" id="sceneWrapper">
+                <div class="scene" id="scene">
+                    <!-- 铁块和南瓜将通过JavaScript动态添加 -->
+                </div>
+            </div>
+        </div>
+        <div class="controls" id="controls">
+            <button id="autoRotate">停止旋转</button>
+        </div>
+        <div class="instructions" id="instructions">
+            左键拖动: 旋转模型<br>
+            右键拖动: 移动模型位置<br>
+            滚轮: 缩放模型<br>
+            空格: 播放/暂停音乐
+        </div>
+    </div>
+
+    <!-- 背景音乐 -->
+    <audio id="bgMusic" loop>
+        <source src="./I_am_bgm.mp3" type="audio/mpeg">
+        您的浏览器不支持音频元素。
+    </audio>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const scene = document.getElementById('scene');
+            const sceneWrapper = document.getElementById('sceneWrapper');
+            const container = document.getElementById('container');
+            const autoRotateBtn = document.getElementById('autoRotate');
+            const controls = document.getElementById('controls');
+            const instructions = document.getElementById('instructions');
+            const audioHint = document.getElementById('audioHint');
+            const bgMusic = document.getElementById('bgMusic');
+            const loading = document.getElementById('loading');
+            
+            let rotationY = 0;
+            let rotationX = 180;
+            let isAutoRotating = true;
+            let autoRotateInterval;
+            let hideTimeout;
+            let audioHintTimeout;
+            
+            let translateX = 0;
+            let translateY = 0;
+            
+            let scale = 1;
+            const minScale = 0.3;
+            const maxScale = 3;
+            
+            let pumpkin, centerTop, centerBottom, leftArm, rightArm;
+            
+            // 检测核心科技文件
+            function checkCoreTech() {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(true);
+                    img.onerror = () => reject(false);
+                    img.src = './core.png';
+                    
+                    // 设置超时检测
+                    setTimeout(() => {
+                        reject(false);
+                    }, 3000);
+                });
+            }
+            
+            // 显示错误信息
+            function showError(message) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.textContent = message;
+                document.body.appendChild(errorDiv);
+                
+                // 隐藏其他
+                loading.style.display = 'none';
+                controls.style.display = 'none';
+                instructions.style.display = 'none';
+                audioHint.style.display = 'none';
+            }
+            
+            // 加载贴图
+            const textures = [
+                './BlockSprite_block-of-iron.png',
+                './BlockSprite_carved-pumpkin.png',
+                './BlockSprite_pumpkin.png',
+                './pumpkin_top.png'
+            ];
+            
+            let loadedTextures = 0;
+            let texturesLoaded = false;
+            
+            function preloadTextures() {
+                textures.forEach(src => {
+                    const img = new Image();
+                    img.onload = () => {
+                        loadedTextures++;
+                        if (loadedTextures === textures.length) {
+                            texturesLoaded = true;
+                            loading.style.display = 'none';
+                            createBlocks();
+                            updateTransform();
+                            toggleAutoRotate();
+                            loopAnimation();
+                            
+                            // 5秒隐藏控制选项和文字
+                            hideTimeout = setTimeout(() => {
+                                controls.classList.add('hidden');
+                                instructions.classList.add('hidden');
+                                audioHint.classList.add('hidden');
+                            }, 5000);
+                        }
+                    };
+                    img.onerror = () => {
+                        console.error(`Failed to load texture: ${src}`);
+                        loadedTextures++;
+                        if (loadedTextures === textures.length) {
+                            texturesLoaded = true;
+                            loading.style.display = 'none';
+                            createBlocks();
+                            updateTransform();
+                            toggleAutoRotate();
+                            loopAnimation();
+                            
+                            // 同上
+                            hideTimeout = setTimeout(() => {
+                                controls.classList.add('hidden');
+                                instructions.classList.add('hidden');
+                                audioHint.classList.add('hidden');
+                            }, 5000);
+                        }
+                    };
+                    img.src = src;
+                });
+                
+                // 设置超时，防止炸机
+                setTimeout(() => {
+                    if (!texturesLoaded) {
+                        loading.textContent = '部分贴图加载失败，使用备用纹理';
+                        texturesLoaded = true;
+                        createBlocks();
+                        updateTransform();
+                        toggleAutoRotate();
+                        loopAnimation();
+                        
+                        // 加载完成后5秒隐藏控制选项和文字
+                        hideTimeout = setTimeout(() => {
+                            controls.classList.add('hidden');
+                            instructions.classList.add('hidden');
+                            audioHint.classList.add('hidden');
+                        }, 5000);
+                    }
+                }, 5000);
+            }
+            
+            // 创建铁块和南瓜 
+            function createBlocks() {
+                // 计算偏移量，使模型居中
+                const offsetY = -100; // 将整个模型下移100px，使中心位于旋转轴上
+                
+                // 第一层：空 南瓜 空 (y=200)
+                pumpkin = createBlock(0, 200 + offsetY, 0, 'pumpkin'); // 南瓜
+                
+                // 第二层：铁块 铁块 铁块 (y=100)
+                leftArm = createBlock(-100, 100 + offsetY, 0, 'iron-block'); // 左铁块
+                centerTop = createBlock(0, 100 + offsetY, 0, 'iron-block'); // 中铁块
+                rightArm = createBlock(100, 100 + offsetY, 0, 'iron-block'); // 右铁块
+                
+                // 第三层：空 铁块 空 (y=0)
+                centerBottom = createBlock(0, 0 + offsetY, 0, 'iron-block'); // 中铁块
+            }
+            
+            function createBlock(x, y, z, type) {
+                const block = document.createElement('div');
+                block.className = `block ${type}`;
+                block.style.width = '100px';
+                block.style.height = '100px';
+                block.style.transform = `translate3d(${x}px, ${y}px, ${z}px)`;
+                
+                // 创建立方体的六个面
+                const faces = ['front', 'back', 'right', 'left', 'top', 'bottom'];
+                faces.forEach(face => {
+                    const faceElement = document.createElement('div');
+                    faceElement.className = `face ${face}`;
+                    
+                    // 如果贴图加载失败，添加备用纹理
+                    if (!texturesLoaded) {
+                        const fallback = document.createElement('div');
+                        fallback.className = 'fallback-texture';
+                        faceElement.appendChild(fallback);
+                    }
+                    
+                    block.appendChild(faceElement);
+                });
+                
+                scene.appendChild(block);
+                return block;
+            }
+            
+            // 更新场景旋转、平移和缩放
+            function updateTransform() {
+                // 更新旋转
+                scene.style.transform = `rotateX(${rotationX}deg) rotateY(${rotationY + 180}deg)`;
+                // 更新平移和缩放
+                sceneWrapper.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`;
+            }
+            
+            // 自动旋转功能
+            function toggleAutoRotate() {
+                isAutoRotating = !isAutoRotating;
+                
+                if (isAutoRotating) {
+                    autoRotateBtn.textContent = '停止旋转';
+                    autoRotateInterval = setInterval(function() {
+                        rotationY += 0.5;
+                        updateTransform();
+                    }, 50);
+                } else {
+                    autoRotateBtn.textContent = '开始自转';
+                    clearInterval(autoRotateInterval);
+                }
+            }
+            
+            // 显示控制界面和提示文字
+            function showControls() {
+                controls.classList.remove('hidden');
+                instructions.classList.remove('hidden');
+                audioHint.classList.add('hidden');
+                
+                // 清除之前的隐藏计时
+                clearTimeout(hideTimeout);
+                
+                // 5秒后隐藏控制界面
+                hideTimeout = setTimeout(() => {
+                    controls.classList.add('hidden');
+                    instructions.classList.add('hidden');
+                }, 5000);
+            }
+            
+            // 音频控制功能
+            function toggleAudio() {
+                if (bgMusic.paused) {
+                    bgMusic.play().catch(error => {
+                        console.error('播放音乐失败:', error);
+                    });
+                } else {
+                    bgMusic.pause();
+                }
+            }
+            
+            // 缩放功能
+            function handleZoom(event) {
+                event.preventDefault();
+                
+                // 计算缩放增量
+                const zoomIntensity = 0.001;
+                const wheel = event.deltaY;
+                let zoom = Math.exp(wheel * -zoomIntensity);
+                
+                // 应用缩放
+                scale = Math.min(maxScale, Math.max(minScale, scale * zoom));
+                updateTransform();
+                
+                // 显示控制界面
+                showControls();
+            }
+            
+            // 铁傀儡动画
+            function startAnimation() {
+                // 第一阶段
+                centerTop.style.transform = 'translate3d(0px, 0px, 100px)';
+                centerBottom.style.transform = 'translate3d(0px, -100px, 100px)';
+                
+                // 第一阶段后
+                setTimeout(() => {
+                    centerTop.style.transform = 'translate3d(0px, 0px, 0px)';
+                    centerBottom.style.transform = 'translate3d(0px, -100px, 0px)';
+                    
+                    // 第二阶段
+                    setTimeout(() => {
+                        leftArm.style.transform = 'translate3d(-100px, 0px, 100px)';
+                        rightArm.style.transform = 'translate3d(100px, 0px, 100px)';
+                        
+                        // 第二阶段后
+                        setTimeout(() => {
+                            leftArm.style.transform = 'translate3d(-100px, 0px, 0px)';
+                            rightArm.style.transform = 'translate3d(100px, 0px, 0px)';
+                        }, 400);
+                    }, 200);
+                }, 400);
+            }
+            
+            // 循环
+            function loopAnimation() {
+                startAnimation();
+                setTimeout(loopAnimation, 1200); // 每1.2秒循环一次
+            }
+            
+            // 按钮事件
+            autoRotateBtn.addEventListener('click', function() {
+                toggleAutoRotate();
+                clearTimeout(hideTimeout);
+                hideTimeout = setTimeout(() => {
+                    controls.classList.add('hidden');
+                    instructions.classList.add('hidden');
+                }, 5000);
+            });
+            
+            // 点击屏幕显示控制界面
+            container.addEventListener('click', function(e) {
+                if (!e.target.closest('.controls')) {
+                    showControls();
+                }
+            });
+            
+            // 添加鼠标拖动旋转功能（左键）
+            let isRotating = false;
+            let isMoving = false;
+            let previousMouseX = 0;
+            let previousMouseY = 0;
+            
+            sceneWrapper.addEventListener('mousedown', function(e) {
+                // 左键 - 旋转
+                if (e.button === 0) {
+                    isRotating = true;
+                    previousMouseX = e.clientX;
+                    previousMouseY = e.clientY;
+                    document.body.classList.add('dragging');
+                    
+                    if (isAutoRotating) {
+                        toggleAutoRotate();
+                    }
+                }
+                // 右键 - 移动
+                else if (e.button === 2) {
+                    isMoving = true;
+                    previousMouseX = e.clientX;
+                    previousMouseY = e.clientY;
+                    document.body.classList.add('dragging');
+                    e.preventDefault(); // 防止上下文菜单
+                }
+            });
+            
+            document.addEventListener('mousemove', function(e) {
+                if (isRotating) {
+                    const deltaX = e.clientX - previousMouseX;
+                    const deltaY = e.clientY - previousMouseY;
+                    
+                    rotationY += deltaX * 0.5;
+                    rotationX += deltaY * 0.5;
+                    
+                    previousMouseX = e.clientX;
+                    previousMouseY = e.clientY;
+                    
+                    updateTransform();
+                } else if (isMoving) {
+                    const deltaX = e.clientX - previousMouseX;
+                    const deltaY = e.clientY - previousMouseY;
+                    
+                    translateX += deltaX;
+                    translateY += deltaY;
+                    
+                    previousMouseX = e.clientX;
+                    previousMouseY = e.clientY;
+                    
+                    updateTransform();
+                }
+            });
+            
+            document.addEventListener('mouseup', function(e) {
+                isRotating = false;
+                isMoving = false;
+                document.body.classList.remove('dragging');
+            });
+            
+            // 添加鼠标滚轮缩放功能
+            sceneWrapper.addEventListener('wheel', handleZoom, { passive: false });
+            
+            document.addEventListener('keydown', function(e) {
+                // 空格键控制音频
+                if (e.code === 'Space') {
+                    e.preventDefault(); // 防止页面滚动
+                    toggleAudio();
+                }
+            });
+            
+            // 阻止右键菜单
+            document.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+            });
+            
+            // 尝试自动播放背景音乐
+            function tryPlayMusic() {
+                bgMusic.play().catch(error => {
+                    console.log('自动播放被阻止，请联系腐竹回档');
+                    // 如果自动播放被阻止，在用户交互时尝试播放
+                    document.addEventListener('click', function tryPlayOnInteraction() {
+                        bgMusic.play().then(() => {
+                            document.removeEventListener('click', tryPlayOnInteraction);
+                        }).catch(() => {
+                        });
+                    }, { once: false });
+                });
+            }
+            
+            // 核心科技之草羊机
+            checkCoreTech().then(() => {
+                // 草羊机存在，开始预加载贴图
+                preloadTextures();
+                
+                // 尝试播放背景音乐
+                tryPlayMusic();
+            }).catch(() => {
+                // 显示错误信息
+                showError('缺少核心科技: core.png');
+            });
+        });
+    </script>
+</body>
+</html>
