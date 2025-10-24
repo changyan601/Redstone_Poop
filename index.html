@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>赤石科技-HTML铁傀儡机</title>
+    <title id="pageTitle">赤石科技-HTML铁傀儡机</title>
     <link rel="icon" type="image/png" href="./Red_stone.png">
     <style>
         * {
@@ -21,6 +21,7 @@
             font-family: Arial, sans-serif;
             overflow: hidden;
             cursor: grab;
+            touch-action: none;
         }
         
         body.dragging {
@@ -236,6 +237,7 @@
             </div>
         </div>
         <div class="controls" id="controls">
+            <button id="musicToggle">播放音乐</button>
             <button id="autoRotate">停止旋转</button>
         </div>
         <div class="instructions" id="instructions">
@@ -249,11 +251,61 @@
     <!-- 背景音乐 -->
     <audio id="bgMusic" loop>
         <source src="./I_am_bgm.mp3" type="audio/mpeg">
-        您的浏览器不支持音频元素。
+        <span id="audioUnsupportedText">浏览器不支持音频</span>
     </audio>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // 国际化支持这一块
+            const isEnglish = navigator.language.startsWith('en');
+            
+            // 触摸屏支持
+            const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            
+            // 语言文本配置
+            const textContent = {
+                zh: {
+                    title: "赤石科技-HTML铁傀儡机",
+                    loading: "草羊中...",
+                    autoRotateStop: "停止旋转",
+                    autoRotateStart: "开始自转",
+                    instructions: isTouchDevice ? 
+                        "单指拖动: 旋转模型<br>双指拖动: 移动模型位置<br>双指缩放: 缩放模型<br>点击音乐按钮: 播放/暂停音乐" : 
+                        "左键拖动: 旋转模型<br>右键拖动: 移动模型位置<br>滚轮: 缩放模型<br>空格: 播放/暂停音乐",
+                    playMusic: "播放音乐",
+                    pauseMusic: "暂停音乐",
+                    audioUnsupported: "您的浏览器不支持音频元素。",
+                    autoPlayBlocked: "自动播放被阻止，请联系腐竹回档",
+                    missingCoreTech: "缺少核心科技: core.png",
+                    loadingFail: "部分贴图加载失败，使用备用纹理"
+                },
+                en: {
+                    title: "Redstone Poop - HTML Iron Golem",
+                    loading: "Sheeeeping...",
+                    autoRotateStop: "Stop Rotation",
+                    autoRotateStart: "Start Rotation",
+                    instructions: isTouchDevice ? 
+                        "One finger drag: Rotate model<br>Two finger drag: Move model<br>Pinch: Zoom model<br>music button: Play/Pause music" : 
+                        "Mouse Left: Rotate model<br>Mouse Right: Move model<br>Wheel: Zoom model<br>Space: Play/Pause music",
+                    playMusic: "Play Music",
+                    pauseMusic: "Pause Music",
+                    audioUnsupported: "Your browser does not support the audio element.",
+                    autoPlayBlocked: "Autoplay blocked",
+                    missingCoreTech: "Missing the core : core.png",
+                    loadingFail: "Some textures failed to load, using fallback textures"
+                }
+            };
+            
+            const lang = isEnglish ? textContent.en : textContent.zh;
+            
+            // 更新页面文本内容
+            document.getElementById('pageTitle').textContent = lang.title;
+            document.getElementById('loading').textContent = lang.loading;
+            document.getElementById('autoRotate').textContent = lang.autoRotateStop;
+            document.getElementById('instructions').innerHTML = lang.instructions;
+            document.getElementById('audioUnsupportedText').textContent = lang.audioUnsupported;
+            document.getElementById('musicToggle').textContent = lang.playMusic;
+
             const scene = document.getElementById('scene');
             const sceneWrapper = document.getElementById('sceneWrapper');
             const container = document.getElementById('container');
@@ -263,6 +315,7 @@
             const audioHint = document.getElementById('audioHint');
             const bgMusic = document.getElementById('bgMusic');
             const loading = document.getElementById('loading');
+            const musicToggle = document.getElementById('musicToggle');
             
             let rotationY = 0;
             let rotationX = 180;
@@ -280,7 +333,14 @@
             
             let pumpkin, centerTop, centerBottom, leftArm, rightArm;
             
-            // 检测核心科技文件
+            // 触摸事件
+            let lastTouchDistance = 0;
+            let isPinching = false;
+            let lastTouchX = 0;
+            let lastTouchY = 0;
+            let isTouching = false;
+            
+            // 检测草羊机
             function checkCoreTech() {
                 return new Promise((resolve, reject) => {
                     const img = new Image();
@@ -337,7 +397,6 @@
                             hideTimeout = setTimeout(() => {
                                 controls.classList.add('hidden');
                                 instructions.classList.add('hidden');
-                                audioHint.classList.add('hidden');
                             }, 5000);
                         }
                     };
@@ -356,7 +415,6 @@
                             hideTimeout = setTimeout(() => {
                                 controls.classList.add('hidden');
                                 instructions.classList.add('hidden');
-                                audioHint.classList.add('hidden');
                             }, 5000);
                         }
                     };
@@ -366,7 +424,7 @@
                 // 设置超时，防止炸机
                 setTimeout(() => {
                     if (!texturesLoaded) {
-                        loading.textContent = '部分贴图加载失败，使用备用纹理';
+                        loading.textContent = lang.loadingFail;
                         texturesLoaded = true;
                         createBlocks();
                         updateTransform();
@@ -377,7 +435,6 @@
                         hideTimeout = setTimeout(() => {
                             controls.classList.add('hidden');
                             instructions.classList.add('hidden');
-                            audioHint.classList.add('hidden');
                         }, 5000);
                     }
                 }, 5000);
@@ -385,10 +442,10 @@
             
             // 创建铁块和南瓜 
             function createBlocks() {
-                // 计算偏移量，使模型居中
-                const offsetY = -100; // 将整个模型下移100px，使中心位于旋转轴上
+                // 模型居中
+                const offsetY = -100; 
                 
-                // 第一层：空 南瓜 空 (y=200)
+                // 第一层：南瓜  (y=200)
                 pumpkin = createBlock(0, 200 + offsetY, 0, 'pumpkin'); // 南瓜
                 
                 // 第二层：铁块 铁块 铁块 (y=100)
@@ -396,7 +453,7 @@
                 centerTop = createBlock(0, 100 + offsetY, 0, 'iron-block'); // 中铁块
                 rightArm = createBlock(100, 100 + offsetY, 0, 'iron-block'); // 右铁块
                 
-                // 第三层：空 铁块 空 (y=0)
+                // 第三层： 铁块  (y=0)
                 centerBottom = createBlock(0, 0 + offsetY, 0, 'iron-block'); // 中铁块
             }
             
@@ -440,13 +497,13 @@
                 isAutoRotating = !isAutoRotating;
                 
                 if (isAutoRotating) {
-                    autoRotateBtn.textContent = '停止旋转';
+                    autoRotateBtn.textContent = lang.autoRotateStop;
                     autoRotateInterval = setInterval(function() {
                         rotationY += 0.5;
                         updateTransform();
                     }, 50);
                 } else {
-                    autoRotateBtn.textContent = '开始自转';
+                    autoRotateBtn.textContent = lang.autoRotateStart;
                     clearInterval(autoRotateInterval);
                 }
             }
@@ -455,7 +512,6 @@
             function showControls() {
                 controls.classList.remove('hidden');
                 instructions.classList.remove('hidden');
-                audioHint.classList.add('hidden');
                 
                 // 清除之前的隐藏计时
                 clearTimeout(hideTimeout);
@@ -473,8 +529,10 @@
                     bgMusic.play().catch(error => {
                         console.error('播放音乐失败:', error);
                     });
+                    musicToggle.textContent = lang.pauseMusic;
                 } else {
                     bgMusic.pause();
+                    musicToggle.textContent = lang.playMusic;
                 }
             }
             
@@ -536,6 +594,16 @@
                 }, 5000);
             });
             
+            // 音乐按钮事件
+            musicToggle.addEventListener('click', function() {
+                toggleAudio();
+                clearTimeout(hideTimeout);
+                hideTimeout = setTimeout(() => {
+                    controls.classList.add('hidden');
+                    instructions.classList.add('hidden');
+                }, 5000);
+            });
+            
             // 点击屏幕显示控制界面
             container.addEventListener('click', function(e) {
                 if (!e.target.closest('.controls')) {
@@ -543,7 +611,6 @@
                 }
             });
             
-            // 添加鼠标拖动旋转功能（左键）
             let isRotating = false;
             let isMoving = false;
             let previousMouseX = 0;
@@ -567,7 +634,7 @@
                     previousMouseX = e.clientX;
                     previousMouseY = e.clientY;
                     document.body.classList.add('dragging');
-                    e.preventDefault(); // 防止上下文菜单
+                    e.preventDefault(); 
                 }
             });
             
@@ -606,6 +673,94 @@
             // 添加鼠标滚轮缩放功能
             sceneWrapper.addEventListener('wheel', handleZoom, { passive: false });
             
+            // 触摸事件处理
+            sceneWrapper.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                
+                if (e.touches.length === 1) {
+                    // 单指旋转
+                    isTouching = true;
+                    lastTouchX = e.touches[0].clientX;
+                    lastTouchY = e.touches[0].clientY;
+                    
+                    if (isAutoRotating) {
+                        toggleAutoRotate();
+                    }
+                } else if (e.touches.length === 2) {
+                    // 双指缩放移动
+                    isPinching = true;
+                    lastTouchDistance = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    
+                    // 记录中点位置用于移动
+                    lastTouchX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                    lastTouchY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                }
+                
+                // 显示控制界面
+                showControls();
+            });
+            
+            sceneWrapper.addEventListener('touchmove', function(e) {
+                e.preventDefault();
+                
+                if (e.touches.length === 1 && isTouching) {
+                    const deltaX = e.touches[0].clientX - lastTouchX;
+                    const deltaY = e.touches[0].clientY - lastTouchY;
+                    
+                    rotationY += deltaX * 0.5;
+                    rotationX += deltaY * 0.5;
+                    
+                    lastTouchX = e.touches[0].clientX;
+                    lastTouchY = e.touches[0].clientY;
+                    
+                    updateTransform();
+                } else if (e.touches.length === 2 && isPinching) {
+                    const currentDistance = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    
+                    // 计算缩放
+                    if (lastTouchDistance !== 0) {
+                        const zoomFactor = currentDistance / lastTouchDistance;
+                        scale = Math.min(maxScale, Math.max(minScale, scale * zoomFactor));
+                    }
+                    lastTouchDistance = currentDistance;
+                    
+                    // 计算移动
+                    const currentX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                    const currentY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                    
+                    const deltaX = currentX - lastTouchX;
+                    const deltaY = currentY - lastTouchY;
+                    
+                    translateX += deltaX;
+                    translateY += deltaY;
+                    
+                    lastTouchX = currentX;
+                    lastTouchY = currentY;
+                    
+                    updateTransform();
+                }
+            });
+            
+            sceneWrapper.addEventListener('touchend', function(e) {
+                if (e.touches.length === 0) {
+                    isTouching = false;
+                    isPinching = false;
+                    lastTouchDistance = 0;
+                } else if (e.touches.length === 1) {
+                    // 从双指变为单指
+                    isPinching = false;
+                    isTouching = true;
+                    lastTouchX = e.touches[0].clientX;
+                    lastTouchY = e.touches[0].clientY;
+                }
+            });
+            
             document.addEventListener('keydown', function(e) {
                 // 空格键控制音频
                 if (e.code === 'Space') {
@@ -621,12 +776,15 @@
             
             // 尝试自动播放背景音乐
             function tryPlayMusic() {
-                bgMusic.play().catch(error => {
-                    console.log('自动播放被阻止，请联系腐竹回档');
+                bgMusic.play().then(() => {
+                    musicToggle.textContent = lang.pauseMusic;
+                }).catch(error => {
+                    console.log(lang.autoPlayBlocked);
                     // 如果自动播放被阻止，在用户交互时尝试播放
                     document.addEventListener('click', function tryPlayOnInteraction() {
                         bgMusic.play().then(() => {
                             document.removeEventListener('click', tryPlayOnInteraction);
+                            musicToggle.textContent = lang.pauseMusic;
                         }).catch(() => {
                         });
                     }, { once: false });
@@ -642,7 +800,7 @@
                 tryPlayMusic();
             }).catch(() => {
                 // 显示错误信息
-                showError('缺少核心科技: core.png');
+                showError(lang.missingCoreTech);
             });
         });
     </script>
