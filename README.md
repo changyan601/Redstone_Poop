@@ -1,6 +1,6 @@
 # Redstone_Poop
 ## 赤石科技之铁傀儡机 但是HTML  
-展示视频：[【赤石科技】铁傀儡机 但是HTML](https://www.bilibili.com/video/BV1pKWtzxEqC)  
+展示视频：[【赤石科技】铁傀儡机 但是HTML](https://www.bilibili.com/video/BV1AysFzSEb8/)  
 bgm来自 [《铁傀儡の小曲》《赤石科技の小曲》Assumptions](https://www.bilibili.com/video/BV1Tq73zzE8b)  
 使用贴图均来自Minecraft Wiki及原版1.21.4解包文件  
 使用DeepSeek辅助编写
